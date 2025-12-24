@@ -1,4 +1,4 @@
-import { Task, KeywordResult, SummaryResult, ChatMessage } from '@/types';
+import { Task, KeywordResult, SummaryResult, ChatMessage, TimerState, Theme } from '@/types';
 
 // For development/demo, we use localStorage
 // In actual extension, this would use chrome.storage.local
@@ -9,6 +9,8 @@ const STORAGE_KEYS = {
   SUMMARY_CACHE: 'focusdock_summary',
   CHAT_HISTORY: 'focusdock_chat',
   API_KEY: 'focusdock_api_key',
+  TIMER: 'focusdock_timer',
+  THEME: 'focusdock_theme',
 };
 
 export const storage = {
@@ -127,6 +129,55 @@ export const storage = {
 
   removeApiKey: (): void => {
     localStorage.removeItem(STORAGE_KEYS.API_KEY);
+  },
+
+  // Timer
+  getTimerState: (): TimerState => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.TIMER);
+      if (data) {
+        const state = JSON.parse(data) as TimerState;
+        // If timer was running, calculate elapsed time
+        if (state.status === 'running' && state.startedAt) {
+          const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+          state.remainingSeconds = Math.max(0, state.remainingSeconds - elapsed);
+          if (state.remainingSeconds <= 0) {
+            state.status = 'stopped';
+            state.remainingSeconds = 0;
+          }
+        }
+        return state;
+      }
+    } catch {
+      // Ignore errors
+    }
+    return { status: 'stopped', remainingSeconds: 0, totalSeconds: 0 };
+  },
+
+  saveTimerState: (state: TimerState): void => {
+    // Update startedAt when saving running timer
+    if (state.status === 'running') {
+      state.startedAt = Date.now();
+    }
+    localStorage.setItem(STORAGE_KEYS.TIMER, JSON.stringify(state));
+  },
+
+  clearTimer: (): void => {
+    localStorage.removeItem(STORAGE_KEYS.TIMER);
+  },
+
+  // Theme
+  getTheme: (): Theme => {
+    try {
+      const theme = localStorage.getItem(STORAGE_KEYS.THEME);
+      return theme === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  },
+
+  setTheme: (theme: Theme): void => {
+    localStorage.setItem(STORAGE_KEYS.THEME, theme);
   },
 };
 

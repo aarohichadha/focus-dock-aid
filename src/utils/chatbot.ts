@@ -1,4 +1,4 @@
-import { Task, ChatMessage } from '@/types';
+import { Task, ChatMessage, TimerState } from '@/types';
 import { storage, generateId } from './storage';
 
 export type ChatIntent = 
@@ -7,6 +7,14 @@ export type ChatIntent =
   | 'extract_keywords'
   | 'mark_done'
   | 'delete_task'
+  | 'start_timer'
+  | 'pause_timer'
+  | 'resume_timer'
+  | 'stop_timer'
+  | 'timer_status'
+  | 'enable_dark_mode'
+  | 'enable_light_mode'
+  | 'toggle_theme'
   | 'help'
   | 'unknown';
 
@@ -16,25 +24,48 @@ export interface ParsedCommand {
 }
 
 const INTENT_PATTERNS: { pattern: RegExp; intent: ChatIntent }[] = [
+  // Tasks
   { pattern: /^(show|list|get|view)\s*(my\s*)?(tasks?|todos?|to-?dos?)/i, intent: 'list_tasks' },
   { pattern: /^(tasks?|todos?|to-?dos?)\s*(list)?$/i, intent: 'list_tasks' },
   { pattern: /^what('s| is| are)\s*(my\s*)?(tasks?|todos?)/i, intent: 'list_tasks' },
   
+  // Summarize
   { pattern: /^summarize?\s*(this\s*)?(page)?/i, intent: 'summarize' },
   { pattern: /^(get\s*)?summary/i, intent: 'summarize' },
   { pattern: /^tldr/i, intent: 'summarize' },
   
+  // Keywords
   { pattern: /^(ats|keywords?|extract)\s*(words?|keywords?)?/i, intent: 'extract_keywords' },
   { pattern: /^(get|show|find)\s*(ats\s*)?(keywords?)/i, intent: 'extract_keywords' },
   { pattern: /^job\s*keywords?/i, intent: 'extract_keywords' },
   
+  // Mark done
   { pattern: /^(mark\s*)?done\s+(.+)/i, intent: 'mark_done' },
   { pattern: /^complete\s+(.+)/i, intent: 'mark_done' },
   { pattern: /^finish\s+(.+)/i, intent: 'mark_done' },
   
+  // Delete task
   { pattern: /^delete\s+(.+)/i, intent: 'delete_task' },
   { pattern: /^remove\s+(.+)/i, intent: 'delete_task' },
   
+  // Timer commands
+  { pattern: /^start\s+(timer|pomodoro)\s*(for\s*)?(\d+)?\s*(min(ute)?s?)?/i, intent: 'start_timer' },
+  { pattern: /^start\s*pomodoro/i, intent: 'start_timer' },
+  { pattern: /^(set|begin)\s*timer\s*(for\s*)?(\d+)?\s*(min(ute)?s?)?/i, intent: 'start_timer' },
+  { pattern: /^pause\s*timer/i, intent: 'pause_timer' },
+  { pattern: /^resume\s*timer/i, intent: 'resume_timer' },
+  { pattern: /^(stop|cancel|end)\s*timer/i, intent: 'stop_timer' },
+  { pattern: /^timer\s*(status|time|remaining)?/i, intent: 'timer_status' },
+  { pattern: /^(how much|what)\s*(time)?\s*(is\s*)?(left|remaining)/i, intent: 'timer_status' },
+  
+  // Theme commands
+  { pattern: /^(enable|set|use|switch\s*to)\s*dark\s*(mode|theme)?/i, intent: 'enable_dark_mode' },
+  { pattern: /^dark\s*(mode|theme)/i, intent: 'enable_dark_mode' },
+  { pattern: /^(enable|set|use|switch\s*to)\s*light\s*(mode|theme)?/i, intent: 'enable_light_mode' },
+  { pattern: /^light\s*(mode|theme)/i, intent: 'enable_light_mode' },
+  { pattern: /^(switch|toggle)\s*theme/i, intent: 'toggle_theme' },
+  
+  // Help
   { pattern: /^help/i, intent: 'help' },
   { pattern: /^what can you do/i, intent: 'help' },
   { pattern: /^commands?/i, intent: 'help' },
@@ -53,6 +84,16 @@ export const parseCommand = (input: string): ParsedCommand => {
   }
   
   return { intent: 'unknown' };
+};
+
+// Extract timer minutes from command
+export const extractTimerMinutes = (input: string): number => {
+  const match = input.match(/(\d+)\s*(min(ute)?s?)?/i);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  // Default to 25 minutes for pomodoro
+  return 25;
 };
 
 export const formatTaskList = (tasks: Task[]): string => {
@@ -114,24 +155,50 @@ export const findTaskByQuery = (query: string, tasks: Task[]): Task | null => {
   return null;
 };
 
+export const formatTimerStatus = (state: TimerState, formatTime: (s: number) => string): string => {
+  if (state.status === 'stopped' && state.remainingSeconds === 0) {
+    return "⏱️ No timer is currently running. Say 'start timer for 25 minutes' to begin!";
+  }
+  
+  const statusEmoji = state.status === 'running' ? '▶️' : '⏸️';
+  const statusText = state.status === 'running' ? 'Running' : 'Paused';
+  
+  let response = `⏱️ **Timer Status:** ${statusEmoji} ${statusText}\n\n`;
+  response += `**Time Remaining:** ${formatTime(state.remainingSeconds)}\n`;
+  response += `**Total Duration:** ${Math.floor(state.totalSeconds / 60)} minutes\n`;
+  
+  if (state.linkedTaskTitle) {
+    response += `**Linked Task:** ${state.linkedTaskTitle}`;
+  }
+  
+  return response;
+};
+
 export const generateHelpMessage = (): string => {
   return `🤖 **FocusDock Commands**
 
 📋 **Tasks:**
 • "show my tasks" - List all tasks
-• "list todos" - Same as above
+• "done [task]" - Mark task complete
+• "delete [task]" - Remove a task
 
 📝 **Summarize:**
 • "summarize" - Summarize current page
-• "tldr" - Same as above
 
 🔍 **Keywords:**
 • "ats keywords" - Extract job keywords
-• "extract keywords" - Same as above
 
-✅ **Manage:**
-• "done [task name/number]" - Mark task complete
-• "delete [task name/number]" - Remove a task
+⏱️ **Timer:**
+• "start timer for 25 minutes"
+• "start pomodoro" (25 min default)
+• "pause timer" / "resume timer"
+• "stop timer"
+• "timer status"
+
+🎨 **Theme:**
+• "enable dark mode"
+• "enable light mode"
+• "switch theme"
 
 💡 **Tips:**
 • Use the tabs above for more features
