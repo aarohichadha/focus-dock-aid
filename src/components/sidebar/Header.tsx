@@ -1,11 +1,14 @@
-import { X, Settings } from 'lucide-react';
+import { X, Settings, Moon, Sun } from 'lucide-react';
+import { Theme } from '@/types';
 
 interface HeaderProps {
   onClose: () => void;
   onOpenSettings: () => void;
+  theme: Theme;
+  onToggleTheme: () => void;
 }
 
-export const Header = ({ onClose, onOpenSettings }: HeaderProps) => {
+export const Header = ({ onClose, onOpenSettings, theme, onToggleTheme }: HeaderProps) => {
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
       <div className="flex items-center gap-3">
@@ -18,6 +21,18 @@ export const Header = ({ onClose, onOpenSettings }: HeaderProps) => {
         </div>
       </div>
       <div className="flex items-center gap-1">
+        <button
+          onClick={onToggleTheme}
+          className="icon-button"
+          aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          title={theme === 'light' ? 'Dark mode' : 'Light mode'}
+        >
+          {theme === 'light' ? (
+            <Moon className="w-4 h-4" />
+          ) : (
+            <Sun className="w-4 h-4" />
+          )}
+        </button>
         <button
           onClick={onOpenSettings}
           className="icon-button"

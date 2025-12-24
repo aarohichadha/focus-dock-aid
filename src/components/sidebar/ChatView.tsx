@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Trash2 } from 'lucide-react';
-import { ChatMessage, Task } from '@/types';
+import { ChatMessage, Task, TimerState, Theme } from '@/types';
 import { storage, generateId } from '@/utils/storage';
 import { extractPageContent, getPageInfo } from '@/utils/textExtractor';
 import { summarizeText } from '@/utils/summarizer';
@@ -12,21 +12,44 @@ import {
   generateHelpMessage,
   createBotMessage,
   createUserMessage,
+  extractTimerMinutes,
+  formatTimerStatus,
 } from '@/utils/chatbot';
 
 interface ChatViewProps {
   tasks: Task[];
   onTasksChange: () => void;
+  timerState: TimerState;
+  onStartTimer: (minutes: number, taskId?: string, taskTitle?: string) => void;
+  onPauseTimer: () => void;
+  onResumeTimer: () => void;
+  onStopTimer: () => void;
+  formatTime: (seconds: number) => string;
+  theme: Theme;
+  onSetTheme: (theme: Theme) => void;
+  onToggleTheme: () => void;
 }
 
 const QUICK_COMMANDS = [
-  { label: '📋 Show tasks', message: 'show my tasks' },
+  { label: '📋 Tasks', message: 'show my tasks' },
+  { label: '⏱️ Pomodoro', message: 'start pomodoro' },
   { label: '📝 Summarize', message: 'summarize' },
-  { label: '🔍 ATS Keywords', message: 'ats keywords' },
   { label: '❓ Help', message: 'help' },
 ];
 
-export const ChatView = ({ tasks, onTasksChange }: ChatViewProps) => {
+export const ChatView = ({ 
+  tasks, 
+  onTasksChange,
+  timerState,
+  onStartTimer,
+  onPauseTimer,
+  onResumeTimer,
+  onStopTimer,
+  formatTime,
+  theme,
+  onSetTheme,
+  onToggleTheme,
+}: ChatViewProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,7 +60,7 @@ export const ChatView = ({ tasks, onTasksChange }: ChatViewProps) => {
     if (history.length === 0) {
       // Add welcome message
       const welcome = createBotMessage(
-        "👋 Hi! I'm FocusDock assistant. I can help you manage tasks, summarize pages, and extract keywords. Try the quick commands below or type 'help' for more options!"
+        "👋 Hi! I'm FocusDock assistant. I can help you manage tasks, run timers, summarize pages, and more. Try 'help' to see all commands!"
       );
       setMessages([welcome]);
       storage.addChatMessage(welcome);
@@ -127,6 +150,77 @@ export const ChatView = ({ tasks, onTasksChange }: ChatViewProps) => {
             response = `❌ Couldn't find a task matching "${params}". Try 'show tasks' to see your task list.`;
           }
         }
+        break;
+      }
+
+      case 'start_timer': {
+        if (timerState.status === 'running') {
+          response = `⏱️ Timer is already running! ${formatTime(timerState.remainingSeconds)} remaining. Say 'pause timer' or 'stop timer' first.`;
+        } else {
+          const minutes = extractTimerMinutes(userInput);
+          onStartTimer(minutes);
+          response = `⏱️ **Timer started!** ${minutes} minutes of focus time. You've got this! 💪`;
+        }
+        break;
+      }
+
+      case 'pause_timer': {
+        if (timerState.status === 'paused') {
+          response = "⏸️ Timer is already paused. Say 'resume timer' to continue.";
+        } else if (timerState.status === 'stopped') {
+          response = "❌ No timer is running. Say 'start timer for 25 minutes' to begin.";
+        } else {
+          onPauseTimer();
+          response = `⏸️ **Timer paused** at ${formatTime(timerState.remainingSeconds)}. Say 'resume timer' when ready.`;
+        }
+        break;
+      }
+
+      case 'resume_timer': {
+        if (timerState.status === 'running') {
+          response = `▶️ Timer is already running! ${formatTime(timerState.remainingSeconds)} remaining.`;
+        } else if (timerState.status === 'stopped') {
+          response = "❌ No timer to resume. Say 'start timer for 25 minutes' to begin.";
+        } else {
+          onResumeTimer();
+          response = `▶️ **Timer resumed!** ${formatTime(timerState.remainingSeconds)} remaining. Stay focused!`;
+        }
+        break;
+      }
+
+      case 'stop_timer': {
+        if (timerState.status === 'stopped') {
+          response = "❌ No timer is running.";
+        } else {
+          onStopTimer();
+          response = "⏹️ **Timer stopped.** Ready for your next focus session!";
+        }
+        break;
+      }
+
+      case 'timer_status': {
+        response = formatTimerStatus(timerState, formatTime);
+        break;
+      }
+
+      case 'enable_dark_mode': {
+        onSetTheme('dark');
+        response = "🌙 **Dark mode enabled!** Easy on the eyes.";
+        break;
+      }
+
+      case 'enable_light_mode': {
+        onSetTheme('light');
+        response = "☀️ **Light mode enabled!** Bright and clear.";
+        break;
+      }
+
+      case 'toggle_theme': {
+        onToggleTheme();
+        const newTheme = theme === 'light' ? 'dark' : 'light';
+        response = newTheme === 'dark' 
+          ? "🌙 **Switched to dark mode!**" 
+          : "☀️ **Switched to light mode!**";
         break;
       }
 

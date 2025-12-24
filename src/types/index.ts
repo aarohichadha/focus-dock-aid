@@ -33,3 +33,15 @@ export interface ChatMessage {
 }
 
 export type TabType = 'todo' | 'summarize' | 'ats' | 'chat';
+
+export type Theme = 'light' | 'dark';
+
+export interface TimerState {
+  status: 'stopped' | 'running' | 'paused';
+  remainingSeconds: number;
+  totalSeconds: number;
+  linkedTaskId?: string;
+  linkedTaskTitle?: string;
+  startedAt?: number;
+  pausedAt?: number;
+}
